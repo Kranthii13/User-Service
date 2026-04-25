@@ -21,7 +21,9 @@ class UserService:
         if self._repository.get_by_email(email):
             raise ValueError("User with this email already exists.")
         
-        hashed_password = pwd_context.hash(password)
+        # Bcrypt has a 72-character limit for passwords.
+        password_to_hash = password[:72]
+        hashed_password = pwd_context.hash(password_to_hash)
         user_profile = UserProfile(bio=bio)
         new_user = User(
             email=email,
@@ -32,6 +34,20 @@ class UserService:
         )
         self._repository.add(new_user)
         return new_user
+
+    # --- AUTHENTICATION ---
+    def authenticate_user(self, email: str, password: str) -> Optional[User]:
+        """Authenticates a user by email and password."""
+        user = self._repository.get_by_email(email)
+        if not user:
+            raise ValueError("Invalid email or password.")
+        
+        # Bcrypt has a 72-character limit. We truncate here as well to match the hash.
+        password_to_verify = password[:72]
+        if not pwd_context.verify(password_to_verify, user.hashed_password):
+            raise ValueError("Invalid email or password.")
+            
+        return user
 
     # --- READ ---
     def get_user_by_id(self, user_id: uuid.UUID) -> Optional[User]:

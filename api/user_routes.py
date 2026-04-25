@@ -5,6 +5,7 @@ import uuid
 
 from application.services import UserService
 from dependencies import get_user_service
+from infrastructure.auth import create_access_token
 
 # --- API Schemas ---
 class UserCreateRequest(BaseModel):
@@ -13,6 +14,10 @@ class UserCreateRequest(BaseModel):
     first_name: str
     last_name: str
     bio: Optional[str] = None
+
+class UserLoginRequest(BaseModel):
+    email: EmailStr
+    password: str
 
 class UserUpdateRequest(BaseModel):
     # For updates, all fields are optional.
@@ -38,17 +43,42 @@ class UserResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str
+    user: UserResponse
+
 # --- API Router ---
 router = APIRouter(prefix="/users", tags=["Users"])
 
+# --- AUTHENTICATION ---
+@router.post("/login", response_model=LoginResponse, status_code=status.HTTP_200_OK)
+def login_user_endpoint(request: UserLoginRequest, service: UserService = Depends(get_user_service)):
+    try:
+        user = service.authenticate_user(email=request.email, password=request.password)
+        access_token = create_access_token(data={"sub": str(user.id), "email": user.email})
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": user
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+
 # --- CREATE ---
-@router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
 def create_user_endpoint(request: UserCreateRequest, service: UserService = Depends(get_user_service)):
     try:
-        return service.create_user(
+        user = service.create_user(
             email=request.email, password=request.password,
             first_name=request.first_name, last_name=request.last_name, bio=request.bio
         )
+        access_token = create_access_token(data={"sub": str(user.id), "email": user.email})
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": user
+        }
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 

@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  user-service:
+    build: .
+    container_name: user_service
+    restart: always
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/postgres
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

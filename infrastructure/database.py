@@ -15,12 +15,16 @@ from sqlalchemy.orm import sessionmaker, DeclarativeBase, relationship
 # This specific UUID type helps SQLAlchemy work efficiently with UUIDs in databases like PostgreSQL.
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # --- Database Connection ---
 # This is the connection string. It tells SQLAlchemy where our database is.
 # For this tutorial, we're using SQLite, which is a simple file-based database.
 # The database will be created in a file named 'test.db' in the same directory.
-SQLALCHEMY_DATABASE_URL =  "postgresql://postgres:postgres@localhost:5433/User"
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5433/User")
 
 # The 'engine' is the core entry point for SQLAlchemy to communicate with the database.
 # 'connect_args' is a special setting needed only for SQLite to ensure it works correctly in a multi-threaded
