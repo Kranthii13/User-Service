@@ -49,7 +49,7 @@ class LoginResponse(BaseModel):
     user: UserResponse
 
 # --- API Router ---
-router = APIRouter(prefix="/users", tags=["Users"])
+router = APIRouter(tags=["Users"])
 
 # --- AUTHENTICATION ---
 @router.post("/login", response_model=LoginResponse, status_code=status.HTTP_200_OK)

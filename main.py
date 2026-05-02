@@ -23,7 +23,3 @@ def on_startup():
     create_db_and_tables()
 
 app.include_router(user_routes.router)
-
-@app.get("/", tags=["Health Check"])
-def read_root():
-    return {"status": "ok"}
