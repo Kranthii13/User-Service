@@ -1,11 +1,18 @@
 from typing import Optional, List
-from passlib.context import CryptContext
-import uuid
+import bcrypt
 
-from domain.user import User, UserProfile
-from application.ports.user_repository import UserRepository
+def hash_password(password: str) -> str:
+    pwd_bytes = password[:72].encode('utf-8')
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(pwd_bytes, salt).decode('utf-8')
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    try:
+        pwd_bytes = plain_password[:72].encode('utf-8')
+        hash_bytes = hashed_password.encode('utf-8')
+        return bcrypt.checkpw(pwd_bytes, hash_bytes)
+    except Exception:
+        return False
 
 class UserService:
     """
@@ -22,8 +29,7 @@ class UserService:
             raise ValueError("User with this email already exists.")
         
         # Bcrypt has a 72-character limit for passwords.
-        password_to_hash = password[:72]
-        hashed_password = pwd_context.hash(password_to_hash)
+        hashed_password = hash_password(password)
         user_profile = UserProfile(bio=bio)
         new_user = User(
             email=email,
@@ -42,9 +48,7 @@ class UserService:
         if not user:
             raise ValueError("Invalid email or password.")
         
-        # Bcrypt has a 72-character limit. We truncate here as well to match the hash.
-        password_to_verify = password[:72]
-        if not pwd_context.verify(password_to_verify, user.hashed_password):
+        if not verify_password(password, user.hashed_password):
             raise ValueError("Invalid email or password.")
             
         return user
