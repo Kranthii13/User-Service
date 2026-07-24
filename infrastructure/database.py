@@ -25,6 +25,8 @@ load_dotenv()
 # For this tutorial, we're using SQLite, which is a simple file-based database.
 # The database will be created in a file named 'test.db' in the same directory.
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5433/User")
+if SQLALCHEMY_DATABASE_URL and SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
+    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 # The 'engine' is the core entry point for SQLAlchemy to communicate with the database.
 # 'connect_args' is a special setting needed only for SQLite to ensure it works correctly in a multi-threaded
