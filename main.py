@@ -23,8 +23,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from fastapi import Response
+
 @app.on_event("startup")
 def on_startup():
     create_db_and_tables()
+
+@app.head("/")
+def head_root():
+    return Response(status_code=200)
+
+@app.api_route("/health", methods=["GET", "HEAD"])
+def health():
+    return {"status": "healthy"}
 
 app.include_router(user_routes.router)
