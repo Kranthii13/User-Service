@@ -1,5 +1,9 @@
 from typing import Optional, List
 import bcrypt
+import uuid
+
+from domain.user import User, UserProfile
+from application.ports.user_repository import UserRepository
 
 def hash_password(password: str) -> str:
     pwd_bytes = password[:72].encode('utf-8')
