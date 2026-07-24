@@ -29,12 +29,12 @@ from fastapi import Response
 def on_startup():
     create_db_and_tables()
 
-@app.head("/")
-def head_root():
-    return Response(status_code=200)
+@app.api_route("/", methods=["GET", "HEAD"])
+def root():
+    return {"service": "User Service", "status": "online"}
 
 @app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     return {"status": "healthy"}
 
-app.include_router(user_routes.router)
+app.include_router(user_routes.router, prefix="/api/users")
