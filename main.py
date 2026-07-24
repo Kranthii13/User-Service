@@ -23,18 +23,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from fastapi import Response
-
 @app.on_event("startup")
 def on_startup():
     create_db_and_tables()
-
-@app.api_route("/", methods=["GET", "HEAD"])
-def root():
-    return {"service": "User Service", "status": "online"}
 
 @app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     return {"status": "healthy"}
 
+# Mount router at root (for Gateway proxied requests: /login, /, /refresh, /logout)
+app.include_router(user_routes.router)
+
+# Also mount with /api/users prefix (for direct service requests: /api/users/login, /api/users/)
 app.include_router(user_routes.router, prefix="/api/users")
