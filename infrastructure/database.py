@@ -75,18 +75,26 @@ class ProfileTable(Base):
     __tablename__ = "profiles"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    bio = Column(String, nullable=True) # nullable=True means this field can be empty.
+    bio = Column(String, nullable=True)
+    theme = Column(String, default="dark", nullable=True)
+    accent_color = Column(String, default="#0ea5e9", nullable=True)
 
     # This is the foreign key that links a profile back to a specific user.
-    # It says that the 'user_id' column in this table must match an 'id' in the 'users' table.
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
 
     # This is the other side of the relationship defined in UserTable.
     user = relationship("UserTable", back_populates="profile")
 
 
+from sqlalchemy import text
+
 # --- Helper Function ---
 def create_db_and_tables():
-    # This function tells SQLAlchemy to look at all the classes that inherit from 'Base'
-    # and create the corresponding tables in the database if they don't already exist.
     Base.metadata.create_all(bind=engine)
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS theme VARCHAR DEFAULT 'dark'"))
+            conn.execute(text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS accent_color VARCHAR DEFAULT '#0ea5e9'"))
+            conn.commit()
+    except Exception:
+        pass

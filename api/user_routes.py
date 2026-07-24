@@ -24,12 +24,14 @@ class UserUpdateRequest(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     bio: Optional[str] = None
+    theme: Optional[str] = None
+    accent_color: Optional[str] = None
 
 class ProfileResponse(BaseModel):
     bio: Optional[str] = None
+    theme: Optional[str] = "dark"
+    accent_color: Optional[str] = "#0ea5e9"
     
-    # This Config class was missing. It tells this nested model
-    # that it can also be created from database object attributes.
     class Config:
         from_attributes = True
 
@@ -159,7 +161,9 @@ def update_user_endpoint(user_id: uuid.UUID, request: UserUpdateRequest, service
         user_id=user_id,
         first_name=request.first_name,
         last_name=request.last_name,
-        bio=request.bio
+        bio=request.bio,
+        theme=request.theme,
+        accent_color=request.accent_color
     )
     if not updated_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")

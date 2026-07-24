@@ -7,9 +7,9 @@ class UserProfile(BaseModel):
     A nested model to hold profile information.
     """
     bio: Optional[str] = None
+    theme: Optional[str] = "dark"
+    accent_color: Optional[str] = "#0ea5e9"
 
-    # This Config class was missing. It tells this nested domain model
-    # that it can also be created from database object attributes.
     class Config:
         from_attributes = True
 

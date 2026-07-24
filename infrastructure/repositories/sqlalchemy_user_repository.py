@@ -15,7 +15,11 @@ class SQLAlchemyUserRepository(UserRepository):
         self._db: Session = db_session
 
     def add(self, user_domain: UserDomain) -> None:
-        db_profile = ProfileTable(bio=user_domain.profile.bio)
+        db_profile = ProfileTable(
+            bio=user_domain.profile.bio,
+            theme=user_domain.profile.theme,
+            accent_color=user_domain.profile.accent_color
+        )
         db_user = UserTable(
             id=user_domain.id,
             email=user_domain.email,
@@ -63,6 +67,8 @@ class SQLAlchemyUserRepository(UserRepository):
             # Ensure profile exists before updating
             if db_user.profile:
                 db_user.profile.bio = user_domain.profile.bio
+                db_user.profile.theme = user_domain.profile.theme
+                db_user.profile.accent_color = user_domain.profile.accent_color
             
             self._db.commit()
 
