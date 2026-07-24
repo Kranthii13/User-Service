@@ -12,7 +12,7 @@ app = FastAPI(
 import os
 
 # Enable CORS
-allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:5174,http://localhost:3000")
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "https://life-flow-fe-cyan.vercel.app,http://localhost:5173,http://localhost:5174,http://localhost:3000")
 origins = [origin.strip() for origin in allowed_origins_env.split(",") if origin.strip()]
 
 app.add_middleware(
