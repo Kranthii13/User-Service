@@ -1,74 +1,48 @@
-# --- Imports ---
-# We import the tools we need from sqlalchemy.
-# - create_engine: Establishes the connection to the database.
-# - Column, String, ForeignKey: Used to define the structure of our table columns.
-# - sessionmaker: A factory for creating database session objects.
-# - DeclarativeBase: A base class that our table models will inherit from.
-# - relationship: Defines how two tables are linked together.
 from sqlalchemy import (
     create_engine,
     Column,
     String,
-    ForeignKey
+    Boolean,
+    DateTime,
+    ForeignKey,
+    text
 )
 from sqlalchemy.orm import sessionmaker, DeclarativeBase, relationship
-# This specific UUID type helps SQLAlchemy work efficiently with UUIDs in databases like PostgreSQL.
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 import os
+from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
 
 # --- Database Connection ---
-# This is the connection string. It tells SQLAlchemy where our database is.
-# For this tutorial, we're using SQLite, which is a simple file-based database.
-# The database will be created in a file named 'test.db' in the same directory.
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5433/User")
 if SQLALCHEMY_DATABASE_URL and SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
     SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# The 'engine' is the core entry point for SQLAlchemy to communicate with the database.
-# 'connect_args' is a special setting needed only for SQLite to ensure it works correctly in a multi-threaded
-# environment like a web application.
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL
 )
 
-# A 'Session' is like an ongoing conversation with the database.
-# We create a 'SessionLocal' class here. Later, we will create instances of this class
-# to handle each individual request to our application.
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-
-# --- Base Class for Table Models ---
-# We create a 'Base' class by inheriting from DeclarativeBase.
-# Any class that represents a database table will inherit from this 'Base'.
-# This is how SQLAlchemy's "Object-Relational Mapping" (ORM) works.
 class Base(DeclarativeBase):
     pass
 
-
-# --- SQLAlchemy Table Models ---
-# IMPORTANT: These classes define the DATABASE tables. They are related to, but SEPARATE from,
-# our Pydantic DOMAIN models. This separation is key to our architecture.
+# --- Table Models ---
 
 class UserTable(Base):
-    __tablename__ = "users" # This must be the actual table name in the database.
+    __tablename__ = "users"
 
-    # Define the columns of the 'users' table.
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     first_name = Column(String, nullable=False)
     last_name = Column(String, nullable=False)
 
-    # This defines the 'one-to-one' relationship between a User and their Profile.
-    # - "ProfileTable": The other class in the relationship.
-    # - back_populates="user": Links this to the 'user' attribute in ProfileTable.
-    # - uselist=False: Specifies this is a one-to-one (one user has one profile).
-    # - cascade="all, delete-orphan": Important! This means if a user is deleted, their associated profile is automatically deleted too.
     profile = relationship("ProfileTable", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    refresh_tokens = relationship("RefreshTokenTable", back_populates="user", cascade="all, delete-orphan")
 
 
 class ProfileTable(Base):
@@ -79,16 +53,29 @@ class ProfileTable(Base):
     theme = Column(String, default="dark", nullable=True)
     accent_color = Column(String, default="#0ea5e9", nullable=True)
 
-    # This is the foreign key that links a profile back to a specific user.
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-
-    # This is the other side of the relationship defined in UserTable.
     user = relationship("UserTable", back_populates="profile")
 
 
-from sqlalchemy import text
+class RefreshTokenTable(Base):
+    __tablename__ = "refresh_tokens"
 
-# --- Helper Function ---
+    # token_id is a UUID Primary Key for O(1) indexed fast lookup
+    token_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id = Column(UUID(as_uuid=True), index=True, nullable=False, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    token_hash = Column(String, nullable=False) # Argon2id hash ($argon2id$)
+    family = Column(String, index=True, nullable=False)
+    device_name = Column(String, nullable=True, default="Unknown Device")
+    ip_address = Column(String, nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    revoked = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    last_used = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    user = relationship("UserTable", back_populates="refresh_tokens")
+
+
 def create_db_and_tables():
     Base.metadata.create_all(bind=engine)
     try:
