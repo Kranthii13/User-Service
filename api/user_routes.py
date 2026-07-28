@@ -9,6 +9,7 @@ from sqlalchemy import desc, asc
 
 from application.services import UserService
 from dependencies import get_user_service
+from api.auth_guard import get_current_user_id
 from infrastructure.auth import (
     create_access_token, 
     generate_split_refresh_token, 
@@ -66,11 +67,13 @@ class UserUpdateRequest(BaseModel):
     bio: Optional[str] = None
     theme: Optional[str] = None
     accent_color: Optional[str] = None
+    navigation_preferences: Optional[dict] = None
 
 class ProfileResponse(BaseModel):
     bio: Optional[str] = None
     theme: Optional[str] = "dark"
     accent_color: Optional[str] = "#0ea5e9"
+    navigation_preferences: Optional[dict] = None
     
     class Config:
         from_attributes = True
@@ -337,21 +340,11 @@ def refresh_token_endpoint(
 # --- SESSION MANAGEMENT (List Active Devices) ---
 @router.get("/sessions", response_model=List[SessionResponse])
 def get_user_sessions_endpoint(
-    authorization: Optional[str] = Header(None),
+    current_user_id: uuid.UUID = Depends(get_current_user_id),
     db: Session = Depends(get_db)
 ):
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Bearer token required")
-    
-    payload = verify_token(authorization.split(" ")[1])
-    if not payload:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    
-    user_id_str = payload.get("sub")
-    current_sid_str = payload.get("sid")
-    
     tokens = db.query(RefreshTokenTable).filter(
-        RefreshTokenTable.user_id == uuid.UUID(user_id_str),
+        RefreshTokenTable.user_id == current_user_id,
         RefreshTokenTable.revoked == False,
         RefreshTokenTable.expires_at > datetime.utcnow()
     ).order_by(desc(RefreshTokenTable.last_used)).all()
@@ -365,7 +358,7 @@ def get_user_sessions_endpoint(
                 "session_id": t.session_id,
                 "device_name": t.device_name or "Unknown Device",
                 "last_seen": t.last_used,
-                "is_current": str(t.session_id) == current_sid_str
+                "is_current": False
             })
     return result
 
@@ -373,25 +366,16 @@ def get_user_sessions_endpoint(
 @router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
 def revoke_session_endpoint(
     session_id: uuid.UUID,
-    authorization: Optional[str] = Header(None),
+    current_user_id: uuid.UUID = Depends(get_current_user_id),
     db: Session = Depends(get_db)
 ):
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Bearer token required")
-    
-    payload = verify_token(authorization.split(" ")[1])
-    if not payload:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    
-    user_id_str = payload.get("sub")
-
     db.query(RefreshTokenTable).filter(
-        RefreshTokenTable.user_id == uuid.UUID(user_id_str),
+        RefreshTokenTable.user_id == current_user_id,
         RefreshTokenTable.session_id == session_id
     ).update({"revoked": True})
     db.commit()
 
-    logger.info(f"AUDIT: EVENT=REVOKE_SESSION USER_ID={user_id_str} TARGET_SESSION={session_id}")
+    logger.info(f"AUDIT: EVENT=REVOKE_SESSION USER_ID={current_user_id} TARGET_SESSION={session_id}")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 # --- LOGOUT ---
@@ -419,52 +403,73 @@ def logout_endpoint(
 @router.post("/logout-all", status_code=status.HTTP_204_NO_CONTENT)
 def logout_all_endpoint(
     response: Response,
-    authorization: Optional[str] = Header(None),
+    current_user_id: uuid.UUID = Depends(get_current_user_id),
     db: Session = Depends(get_db)
 ):
-    if authorization and authorization.startswith("Bearer "):
-        payload = verify_token(authorization.split(" ")[1])
-        if payload:
-            user_id_str = payload.get("sub")
-            db.query(RefreshTokenTable).filter(RefreshTokenTable.user_id == uuid.UUID(user_id_str)).update({"revoked": True})
-            db.commit()
-            logger.info(f"AUDIT: EVENT=LOGOUT_ALL USER_ID={user_id_str}")
+    db.query(RefreshTokenTable).filter(RefreshTokenTable.user_id == current_user_id).update({"revoked": True})
+    db.commit()
+    logger.info(f"AUDIT: EVENT=LOGOUT_ALL USER_ID={current_user_id}")
 
     response.delete_cookie("refresh_token")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-# --- READ (ALL) ---
+# --- READ (ALL - PROTECTED) ---
 @router.get("/", response_model=List[UserResponse])
-def get_all_users_endpoint(service: UserService = Depends(get_user_service)):
+def get_all_users_endpoint(
+    current_user_id: uuid.UUID = Depends(get_current_user_id),
+    service: UserService = Depends(get_user_service)
+):
+    # Only authenticated users can access, returning user records securely
     return service.get_all_users()
 
-# --- READ (ONE) ---
+# --- READ (ONE - PROTECTED) ---
 @router.get("/{user_id}", response_model=UserResponse)
-def get_user_by_id_endpoint(user_id: uuid.UUID, service: UserService = Depends(get_user_service)):
+def get_user_by_id_endpoint(
+    user_id: uuid.UUID,
+    current_user_id: uuid.UUID = Depends(get_current_user_id),
+    service: UserService = Depends(get_user_service)
+):
+    if current_user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: Cannot view another user's profile")
     user = service.get_user_by_id(user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return user
 
-# --- UPDATE ---
+# --- UPDATE (PROTECTED & AUTHORIZED) ---
 @router.put("/{user_id}", response_model=UserResponse)
-def update_user_endpoint(user_id: uuid.UUID, request_data: UserUpdateRequest, service: UserService = Depends(get_user_service)):
+def update_user_endpoint(
+    user_id: uuid.UUID,
+    request_data: UserUpdateRequest,
+    current_user_id: uuid.UUID = Depends(get_current_user_id),
+    service: UserService = Depends(get_user_service)
+):
+    if current_user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: Cannot update another user's profile")
     updated_user = service.update_user(
         user_id=user_id,
         first_name=request_data.first_name,
         last_name=request_data.last_name,
         bio=request_data.bio,
         theme=request_data.theme,
-        accent_color=request_data.accent_color
+        accent_color=request_data.accent_color,
+        navigation_preferences=request_data.navigation_preferences
     )
     if not updated_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return updated_user
 
-# --- DELETE ---
+# --- DELETE (PROTECTED & AUTHORIZED) ---
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_user_endpoint(user_id: uuid.UUID, service: UserService = Depends(get_user_service)):
+def delete_user_endpoint(
+    user_id: uuid.UUID,
+    current_user_id: uuid.UUID = Depends(get_current_user_id),
+    service: UserService = Depends(get_user_service)
+):
+    if current_user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: Cannot delete another user's account")
     success = service.delete_user(user_id)
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+

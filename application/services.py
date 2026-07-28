@@ -68,7 +68,7 @@ class UserService:
 
     # --- UPDATE ---
     def update_user(
-        self, user_id: uuid.UUID, first_name: Optional[str] = None, last_name: Optional[str] = None, bio: Optional[str] = None, theme: Optional[str] = None, accent_color: Optional[str] = None
+        self, user_id: uuid.UUID, first_name: Optional[str] = None, last_name: Optional[str] = None, bio: Optional[str] = None, theme: Optional[str] = None, accent_color: Optional[str] = None, navigation_preferences: Optional[dict] = None
     ) -> Optional[User]:
         """Updates a user's profile information."""
         user_to_update = self._repository.get_by_id(user_id)
@@ -87,6 +87,8 @@ class UserService:
             user_to_update.profile.theme = theme
         if accent_color is not None:
             user_to_update.profile.accent_color = accent_color
+        if navigation_preferences is not None:
+            user_to_update.profile.navigation_preferences = navigation_preferences
         
         self._repository.update(user_to_update)
         return user_to_update

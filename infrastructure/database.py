@@ -5,6 +5,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    JSON,
     text
 )
 from sqlalchemy.orm import sessionmaker, DeclarativeBase, relationship
@@ -52,6 +53,7 @@ class ProfileTable(Base):
     bio = Column(String, nullable=True)
     theme = Column(String, default="dark", nullable=True)
     accent_color = Column(String, default="#0ea5e9", nullable=True)
+    navigation_preferences = Column(JSON, nullable=True)
 
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     user = relationship("UserTable", back_populates="profile")
@@ -82,6 +84,7 @@ def create_db_and_tables():
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS theme VARCHAR DEFAULT 'dark'"))
             conn.execute(text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS accent_color VARCHAR DEFAULT '#0ea5e9'"))
+            conn.execute(text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS navigation_preferences JSON"))
             conn.commit()
     except Exception:
         pass

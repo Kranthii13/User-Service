@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 from jose import jwt
 from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError, InvalidHashError
+from argon2.exceptions import VerifyMismatchError, InvalidHash
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -46,7 +46,7 @@ def verify_refresh_token_hash(stored_hash: str, secret: str) -> bool:
     """Verifies opaque refresh token secret against stored Argon2id hash"""
     try:
         return ph.verify(stored_hash, secret)
-    except (VerifyMismatchError, InvalidHashError, Exception):
+    except (VerifyMismatchError, InvalidHash, Exception):
         return False
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:

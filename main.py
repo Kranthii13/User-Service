@@ -12,12 +12,13 @@ app = FastAPI(
 import os
 
 # Enable CORS
-allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "https://life-flow-fe-cyan.vercel.app,http://localhost:5173,http://localhost:5174,http://localhost:3000")
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "https://life-flow-fe-cyan.vercel.app,http://localhost:5173,http://localhost:5174,http://localhost:3000,http://127.0.0.1:5173,http://192.168.0.10:5173")
 origins = [origin.strip() for origin in allowed_origins_env.split(",") if origin.strip()]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins if origins else ["*"],
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
