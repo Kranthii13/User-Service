@@ -121,6 +121,22 @@ class DeviceOTPTable(Base):
     user = relationship("UserTable")
 
 
+class PendingRegistrationOTPTable(Base):
+    __tablename__ = "pending_registration_otps"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    first_name = Column(String, nullable=False)
+    last_name = Column(String, nullable=False)
+    bio = Column(String, nullable=True)
+    otp_code = Column(String, nullable=False)
+    device_fingerprint = Column(String, nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    attempts = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+
 def create_db_and_tables():
     Base.metadata.create_all(bind=engine)
     try:

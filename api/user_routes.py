@@ -9,7 +9,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc
 
-from application.services import UserService
+from application.services import UserService, hash_password
 from dependencies import get_user_service
 from api.auth_guard import get_current_user_id
 from infrastructure.auth import (
@@ -20,8 +20,9 @@ from infrastructure.auth import (
     verify_token,
     get_jwks
 )
-from infrastructure.database import SessionLocal, RefreshTokenTable, UserTrustedDeviceTable, DeviceOTPTable
+from infrastructure.database import SessionLocal, UserTable, ProfileTable, RefreshTokenTable, UserTrustedDeviceTable, DeviceOTPTable, PendingRegistrationOTPTable
 from infrastructure.email_service import send_device_otp_email
+
 
 logger = logging.getLogger("User-Service-Audit")
 
@@ -88,6 +89,18 @@ class VerifyLoginOTPRequest(BaseModel):
     otp_code: str
     device_fingerprint: Optional[str] = None
     device_name: Optional[str] = None
+
+class RegisterOTPVerifyRequest(BaseModel):
+    email: EmailStr
+    otp_code: str
+    device_fingerprint: Optional[str] = None
+    device_name: Optional[str] = None
+
+class RegisterOTPResendRequest(BaseModel):
+    email: EmailStr
+    device_fingerprint: Optional[str] = None
+    device_name: Optional[str] = None
+
 
 
 class UserUpdateRequest(BaseModel):
@@ -551,78 +564,206 @@ def verify_login_otp_endpoint(
 
 
 
-# --- CREATE / REGISTER ---
-@router.post("/", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
+# --- CREATE / REGISTER WITH EMAIL OTP VERIFICATION ---
+@router.post("/", status_code=status.HTTP_200_OK)
 def create_user_endpoint(
     request_data: UserCreateRequest, 
     req: Request,
-    response: Response, 
     service: UserService = Depends(get_user_service),
     db: Session = Depends(get_db)
 ):
-    try:
-        user = service.create_user(
-            email=request_data.email, password=request_data.password,
-            first_name=request_data.first_name, last_name=request_data.last_name, bio=request_data.bio
-        )
-        device_fingerprint = request_data.device_fingerprint or req.headers.get("x-device-fingerprint")
-        if device_fingerprint:
-            db_trusted = UserTrustedDeviceTable(
-                user_id=user.id,
-                device_fingerprint=device_fingerprint,
-                device_name=parse_device_name(req.headers.get("user-agent")),
-                verified_at=datetime.utcnow()
-            )
-            db.add(db_trusted)
-            db.commit()
+    existing_user = db.query(UserTable).filter(UserTable.email == request_data.email).first()
+    if existing_user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="An account with this email address already exists. Please log in.")
 
-        session_id = uuid.uuid4()
+    device_fingerprint = request_data.device_fingerprint or req.headers.get("x-device-fingerprint") or "web_unknown"
+    device_name = parse_device_name(req.headers.get("user-agent"))
 
-        access_token = create_access_token(data={"sub": str(user.id), "email": user.email, "sid": str(session_id)})
-        token_id_str, secret_token, combined_cookie = generate_split_refresh_token()
-        
-        family_id = str(uuid.uuid4())
-        hashed_argon2 = hash_refresh_token(secret_token)
-        expires_at = datetime.utcnow() + timedelta(days=7)
-        device_name = parse_device_name(req.headers.get("user-agent"))
-        ip_address = req.client.host if req.client else "127.0.0.1"
+    hashed_pwd = hash_password(request_data.password)
+    otp_code = f"{random.randint(100000, 999999)}"
+    expires_at = datetime.utcnow() + timedelta(minutes=10)
 
-        db_token = RefreshTokenTable(
-            token_id=uuid.UUID(token_id_str),
-            session_id=session_id,
-            user_id=user.id,
-            token_hash=hashed_argon2,
-            family=family_id,
-            device_name=device_name,
-            ip_address=ip_address,
+    pending = db.query(PendingRegistrationOTPTable).filter(
+        PendingRegistrationOTPTable.email == request_data.email
+    ).first()
+
+    if pending:
+        pending.hashed_password = hashed_pwd
+        pending.first_name = request_data.first_name
+        pending.last_name = request_data.last_name
+        pending.bio = request_data.bio
+        pending.otp_code = otp_code
+        pending.device_fingerprint = device_fingerprint
+        pending.expires_at = expires_at
+        pending.attempts = 0
+    else:
+        pending = PendingRegistrationOTPTable(
+            email=request_data.email,
+            hashed_password=hashed_pwd,
+            first_name=request_data.first_name,
+            last_name=request_data.last_name,
+            bio=request_data.bio,
+            otp_code=otp_code,
+            device_fingerprint=device_fingerprint,
             expires_at=expires_at,
-            revoked=False
+            attempts=0
         )
-        db.add(db_token)
-        db.commit()
+        db.add(pending)
 
-        logger.info(f"AUDIT: EVENT=REGISTER_SUCCESS USER_ID={user.id} SESSION_ID={session_id} IP={ip_address}")
-        
-        response.set_cookie(
-            key="refresh_token",
-            value=combined_cookie,
-            httponly=True,
-            samesite="lax",
-            max_age=7 * 24 * 60 * 60,
-            secure=False
-        )
+    db.commit()
 
-        return {
-            "access_token": access_token,
-            "token_type": "bearer",
-            "user": user
+    send_device_otp_email(request_data.email, request_data.first_name, otp_code, f"{device_name} (Registration)")
+
+    email_parts = request_data.email.split("@")
+    username = email_parts[0]
+    masked_user = username[0] + "***" + username[-1] if len(username) > 2 else username
+    masked_email = f"{masked_user}@{email_parts[1]}"
+
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={
+            "requires_email_verification": True,
+            "email_masked": masked_email,
+            "device_fingerprint": device_fingerprint,
+            "message": "A 6-digit verification code has been sent to your email to complete registration."
         }
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Registration error: {str(e)}")
+    )
+
+
+@router.post("/verify-registration-otp", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
+def verify_registration_otp_endpoint(
+    request_data: RegisterOTPVerifyRequest,
+    req: Request,
+    response: Response,
+    service: UserService = Depends(get_user_service),
+    db: Session = Depends(get_db)
+):
+    pending = db.query(PendingRegistrationOTPTable).filter(
+        PendingRegistrationOTPTable.email == request_data.email
+    ).first()
+
+    if not pending:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No pending registration found for this email. Please sign up again.")
+
+    now = datetime.now(timezone.utc)
+    exp = pending.expires_at
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+
+    if now > exp:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Registration verification code has expired. Please sign up again.")
+
+    if pending.otp_code.strip() != request_data.otp_code.strip():
+        pending.attempts += 1
+        db.commit()
+        if pending.attempts >= 5:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Too many invalid attempts. Please request a new code.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect verification code. Please check your email.")
+
+    existing_user = db.query(UserTable).filter(UserTable.email == pending.email).first()
+    if existing_user:
+        db.delete(pending)
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="An account with this email address already exists. Please log in.")
+
+    new_user_id = uuid.uuid4()
+    db_profile = ProfileTable(
+        id=uuid.uuid4(),
+        bio=pending.bio,
+        theme="dark",
+        accent_color="#0ea5e9",
+        user_id=new_user_id
+    )
+    db_user = UserTable(
+        id=new_user_id,
+        email=pending.email,
+        hashed_password=pending.hashed_password,
+        first_name=pending.first_name,
+        last_name=pending.last_name,
+        profile=db_profile
+    )
+    db.add(db_user)
+    db.delete(pending)
+
+    device_fingerprint = request_data.device_fingerprint or pending.device_fingerprint or req.headers.get("x-device-fingerprint")
+    device_name = request_data.device_name or parse_device_name(req.headers.get("user-agent"))
+    if device_fingerprint:
+        db_trusted = UserTrustedDeviceTable(
+            user_id=new_user_id,
+            device_fingerprint=device_fingerprint,
+            device_name=device_name,
+            verified_at=datetime.utcnow()
+        )
+        db.add(db_trusted)
+
+    db.commit()
+
+    session_id = uuid.uuid4()
+    access_token = create_access_token(data={"sub": str(db_user.id), "email": db_user.email, "sid": str(session_id)})
+    token_id_str, secret_token, combined_cookie = generate_split_refresh_token()
+    family_id = str(uuid.uuid4())
+    hashed_argon2 = hash_refresh_token(secret_token)
+    expires_at = datetime.utcnow() + timedelta(days=7)
+    ip_address = req.client.host if req.client else "127.0.0.1"
+
+    db_token = RefreshTokenTable(
+        token_id=uuid.UUID(token_id_str),
+        session_id=session_id,
+        user_id=db_user.id,
+        token_hash=hashed_argon2,
+        family=family_id,
+        device_name=device_name,
+        ip_address=ip_address,
+        expires_at=expires_at,
+        revoked=False
+    )
+    db.add(db_token)
+    db.commit()
+
+    logger.info(f"AUDIT: EVENT=VERIFIED_REGISTER_SUCCESS USER_ID={db_user.id} SESSION_ID={session_id} DEVICE='{device_name}'")
+
+    response.set_cookie(
+        key="refresh_token",
+        value=combined_cookie,
+        httponly=True,
+        samesite="lax",
+        max_age=7 * 24 * 60 * 60,
+        secure=False
+    )
+
+    user_domain = service.get_user_by_id(db_user.id) or db_user
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": user_domain
+    }
+
+
+@router.post("/resend-registration-otp", status_code=status.HTTP_200_OK)
+def resend_registration_otp_endpoint(
+    request_data: RegisterOTPResendRequest,
+    db: Session = Depends(get_db)
+):
+    pending = db.query(PendingRegistrationOTPTable).filter(
+        PendingRegistrationOTPTable.email == request_data.email
+    ).first()
+
+    if not pending:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No pending registration found for this email.")
+
+    otp_code = f"{random.randint(100000, 999999)}"
+    pending.otp_code = otp_code
+    pending.expires_at = datetime.utcnow() + timedelta(minutes=10)
+    pending.attempts = 0
+    db.commit()
+
+    send_device_otp_email(pending.email, pending.first_name, otp_code, "Registration Verification")
+
+    return {"message": "A new registration verification code has been sent to your email."}
 
 # --- REFRESH TOKEN (Split Token + O(1) DB Lookup + Argon2id + Atomic Locks + Grace Period) ---
+
 class RefreshResponse(BaseModel):
     access_token: str
     token_type: str

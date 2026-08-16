@@ -90,10 +90,11 @@ class UserService:
 
         # 2. Fallback to local database authentication
         if not user:
-            raise ValueError("Invalid email or password.")
+            raise ValueError("No account found with this email. Please create an account first.")
 
         if not verify_password(password, user.hashed_password):
-            raise ValueError("Invalid email or password.")
+            raise ValueError("Invalid password. Please try again.")
+
             
         return user
 
