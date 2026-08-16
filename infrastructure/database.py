@@ -3,6 +3,7 @@ from sqlalchemy import (
     Column,
     String,
     Boolean,
+    Integer,
     DateTime,
     ForeignKey,
     JSON,
@@ -90,6 +91,34 @@ class RefreshTokenTable(Base):
     last_used = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
     user = relationship("UserTable", back_populates="refresh_tokens")
+
+
+class UserTrustedDeviceTable(Base):
+    __tablename__ = "user_trusted_devices"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    device_fingerprint = Column(String, nullable=False, index=True)
+    device_name = Column(String, nullable=True, default="Unknown Device")
+    verified_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    user = relationship("UserTable")
+
+
+class DeviceOTPTable(Base):
+    __tablename__ = "device_otps"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    device_fingerprint = Column(String, nullable=False, index=True)
+    otp_code = Column(String, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    attempts = Column(Integer, default=0, nullable=False)
+    verified = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    user = relationship("UserTable")
 
 
 def create_db_and_tables():
