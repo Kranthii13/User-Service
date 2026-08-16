@@ -67,12 +67,14 @@ class UserUpdateRequest(BaseModel):
     bio: Optional[str] = None
     theme: Optional[str] = None
     accent_color: Optional[str] = None
+    avatar_url: Optional[str] = None
     navigation_preferences: Optional[dict] = None
 
 class ProfileResponse(BaseModel):
     bio: Optional[str] = None
     theme: Optional[str] = "dark"
     accent_color: Optional[str] = "#0ea5e9"
+    avatar_url: Optional[str] = None
     navigation_preferences: Optional[dict] = None
     
     class Config:
@@ -453,6 +455,7 @@ def update_user_endpoint(
         bio=request_data.bio,
         theme=request_data.theme,
         accent_color=request_data.accent_color,
+        avatar_url=request_data.avatar_url,
         navigation_preferences=request_data.navigation_preferences
     )
     if not updated_user:

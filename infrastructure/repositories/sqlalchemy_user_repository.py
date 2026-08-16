@@ -19,6 +19,7 @@ class SQLAlchemyUserRepository(UserRepository):
             bio=user_domain.profile.bio,
             theme=user_domain.profile.theme,
             accent_color=user_domain.profile.accent_color,
+            avatar_url=user_domain.profile.avatar_url,
             navigation_preferences=user_domain.profile.navigation_preferences
         )
         db_user = UserTable(
@@ -70,6 +71,7 @@ class SQLAlchemyUserRepository(UserRepository):
                 db_user.profile.bio = user_domain.profile.bio
                 db_user.profile.theme = user_domain.profile.theme
                 db_user.profile.accent_color = user_domain.profile.accent_color
+                db_user.profile.avatar_url = user_domain.profile.avatar_url
                 db_user.profile.navigation_preferences = user_domain.profile.navigation_preferences
             
             self._db.commit()

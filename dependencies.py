@@ -26,12 +26,18 @@ def get_user_repository(db: Session = Depends(get_db)) -> UserRepository:
     """
     return SQLAlchemyUserRepository(db)
 
+from infrastructure.adapters.supabase_auth_adapter import SupabaseAuthProvider
+
+def get_auth_provider() -> SupabaseAuthProvider:
+    return SupabaseAuthProvider()
+
 # 3. Dependency for the service
 def get_user_service(
     repository: UserRepository = Depends(get_user_repository),
+    auth_provider: SupabaseAuthProvider = Depends(get_auth_provider)
 ) -> UserService:
     """
     This function creates an instance of our UserService, injecting the
-    repository it gets from the 'get_user_repository' dependency.
+    repository and Supabase AuthProvider.
     """
-    return UserService(repository)
+    return UserService(repository, auth_provider)

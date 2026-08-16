@@ -9,6 +9,7 @@ class UserProfile(BaseModel):
     bio: Optional[str] = None
     theme: Optional[str] = "dark"
     accent_color: Optional[str] = "#0ea5e9"
+    avatar_url: Optional[str] = None
     navigation_preferences: Optional[dict] = None
 
     class Config:

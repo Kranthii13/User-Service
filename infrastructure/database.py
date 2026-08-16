@@ -18,12 +18,25 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- Database Connection ---
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5433/User")
-if SQLALCHEMY_DATABASE_URL and SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
-    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql://", 1)
+def format_supabase_url(url: str) -> str:
+    if not url:
+        return url
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+    if "db.ckfgoifiwvvsbccgjnmn.supabase.co" in url:
+        url = url.replace("postgres:", "postgres.ckfgoifiwvvsbccgjnmn:", 1)
+        url = url.replace("db.ckfgoifiwvvsbccgjnmn.supabase.co:5432", "aws-0-ap-southeast-1.pooler.supabase.com:6543", 1)
+        url = url.replace("db.ckfgoifiwvvsbccgjnmn.supabase.co", "aws-0-ap-southeast-1.pooler.supabase.com:6543", 1)
+    if "supabase" in url and "sslmode" not in url:
+        sep = "&" if "?" in url else "?"
+        url = f"{url}{sep}sslmode=require"
+    return url
+
+SQLALCHEMY_DATABASE_URL = format_supabase_url(os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5433/User"))
 
 engine = create_engine(
-    SQLALCHEMY_DATABASE_URL
+    SQLALCHEMY_DATABASE_URL,
+    pool_pre_ping=True
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -53,6 +66,7 @@ class ProfileTable(Base):
     bio = Column(String, nullable=True)
     theme = Column(String, default="dark", nullable=True)
     accent_color = Column(String, default="#0ea5e9", nullable=True)
+    avatar_url = Column(String, nullable=True)
     navigation_preferences = Column(JSON, nullable=True)
 
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
@@ -84,6 +98,7 @@ def create_db_and_tables():
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS theme VARCHAR DEFAULT 'dark'"))
             conn.execute(text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS accent_color VARCHAR DEFAULT '#0ea5e9'"))
+            conn.execute(text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS avatar_url TEXT"))
             conn.execute(text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS navigation_preferences JSON"))
             conn.commit()
     except Exception:

@@ -10,3 +10,5 @@ PyJWT
 python-jose[cryptography]
 argon2-cffi
 cryptography
+supabase
+python-multipart

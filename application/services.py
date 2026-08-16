@@ -18,12 +18,16 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     except Exception:
         return False
 
+from application.ports.auth_provider import AuthProvider
+
 class UserService:
     """
-    This is our updated Application Service, containing the core business logic for all CRUD operations.
+    Application Service containing core business logic for user management & authentication.
+    Supports optional AuthProvider (e.g. Supabase Auth) adapter integration.
     """
-    def __init__(self, user_repository: UserRepository):
+    def __init__(self, user_repository: UserRepository, auth_provider: Optional[AuthProvider] = None):
         self._repository: UserRepository = user_repository
+        self._auth_provider: Optional[AuthProvider] = auth_provider
 
     # --- CREATE ---
     def create_user(
@@ -32,7 +36,18 @@ class UserService:
         if self._repository.get_by_email(email):
             raise ValueError("User with this email already exists.")
         
-        # Bcrypt has a 72-character limit for passwords.
+        # Register in Supabase Auth Provider if enabled
+        if self._auth_provider:
+            try:
+                self._auth_provider.create_user(
+                    email=email,
+                    password=password,
+                    metadata={"first_name": first_name, "last_name": last_name}
+                )
+            except Exception as e:
+                # Log provider registration warning, proceed with local domain persistence
+                pass
+
         hashed_password = hash_password(password)
         user_profile = UserProfile(bio=bio)
         new_user = User(
@@ -47,11 +62,36 @@ class UserService:
 
     # --- AUTHENTICATION ---
     def authenticate_user(self, email: str, password: str) -> Optional[User]:
-        """Authenticates a user by email and password."""
+        """Authenticates a user by email and password via Supabase Auth or local DB."""
         user = self._repository.get_by_email(email)
+
+        # 1. Try Supabase Auth Provider first if configured
+        if self._auth_provider:
+            try:
+                auth_res = self._auth_provider.sign_in_with_password(email, password)
+                if auth_res and "user" in auth_res:
+                    meta = auth_res["user"].get("user_metadata", {})
+                    first_name = meta.get("first_name", email.split("@")[0].capitalize())
+                    last_name = meta.get("last_name", "User")
+                    
+                    if not user:
+                        # Auto-sync user into database if present in Supabase Auth
+                        user = User(
+                            email=email,
+                            hashed_password=hash_password(password),
+                            first_name=first_name,
+                            last_name=last_name,
+                            profile=UserProfile()
+                        )
+                        self._repository.add(user)
+                    return user
+            except Exception:
+                pass
+
+        # 2. Fallback to local database authentication
         if not user:
             raise ValueError("Invalid email or password.")
-        
+
         if not verify_password(password, user.hashed_password):
             raise ValueError("Invalid email or password.")
             
@@ -68,7 +108,7 @@ class UserService:
 
     # --- UPDATE ---
     def update_user(
-        self, user_id: uuid.UUID, first_name: Optional[str] = None, last_name: Optional[str] = None, bio: Optional[str] = None, theme: Optional[str] = None, accent_color: Optional[str] = None, navigation_preferences: Optional[dict] = None
+        self, user_id: uuid.UUID, first_name: Optional[str] = None, last_name: Optional[str] = None, bio: Optional[str] = None, theme: Optional[str] = None, accent_color: Optional[str] = None, avatar_url: Optional[str] = None, navigation_preferences: Optional[dict] = None
     ) -> Optional[User]:
         """Updates a user's profile information."""
         user_to_update = self._repository.get_by_id(user_id)
@@ -87,6 +127,8 @@ class UserService:
             user_to_update.profile.theme = theme
         if accent_color is not None:
             user_to_update.profile.accent_color = accent_color
+        if avatar_url is not None:
+            user_to_update.profile.avatar_url = avatar_url
         if navigation_preferences is not None:
             user_to_update.profile.navigation_preferences = navigation_preferences
         
