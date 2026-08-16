@@ -281,8 +281,14 @@ def verify_device_otp_endpoint(
     if not otp_rec or otp_rec.verified:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification code.")
 
-    if datetime.utcnow() > otp_rec.expires_at:
+    now = datetime.now(timezone.utc)
+    exp = otp_rec.expires_at
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+
+    if now > exp:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification code has expired. Please request a new code.")
+
 
     if otp_rec.otp_code.strip() != request_data.otp_code.strip():
         otp_rec.attempts += 1
@@ -469,8 +475,14 @@ def verify_login_otp_endpoint(
     if not otp_rec or otp_rec.verified:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired login code.")
 
-    if datetime.utcnow() > otp_rec.expires_at:
+    now = datetime.now(timezone.utc)
+    exp = otp_rec.expires_at
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+
+    if now > exp:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Login code has expired. Please request a new code.")
+
 
     if otp_rec.otp_code.strip() != request_data.otp_code.strip():
         otp_rec.attempts += 1

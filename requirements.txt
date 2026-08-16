@@ -12,3 +12,5 @@ argon2-cffi
 cryptography
 supabase
 python-multipart
+resend
+

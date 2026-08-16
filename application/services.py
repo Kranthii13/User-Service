@@ -102,9 +102,14 @@ class UserService:
         """Fetches a single user by their ID."""
         return self._repository.get_by_id(user_id)
 
+    def get_user_by_email(self, email: str) -> Optional[User]:
+        """Fetches a single user by their email address."""
+        return self._repository.get_by_email(email)
+
     def get_all_users(self) -> List[User]:
         """Fetches all users."""
         return self._repository.get_all()
+
 
     # --- UPDATE ---
     def update_user(

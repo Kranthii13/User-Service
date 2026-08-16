@@ -11,18 +11,21 @@ def send_device_otp_email(to_email: str, first_name: str, otp_code: str, device_
     Dispatches a 6-digit OTP verification email for new device login.
     Uses Resend API if available, else logs the OTP to console.
     """
+    api_key = os.getenv("RESEND_API_KEY", "")
+    from_email = os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+
     logger.info(f"🔑 SECURITY OTP FOR [{to_email}] ({device_name}): {otp_code}")
     print(f"\n========================================================")
     print(f" 🔑 [LifeFlow Security] Device OTP for {to_email}: {otp_code}")
     print(f"========================================================\n", flush=True)
 
-    if not RESEND_API_KEY or "your_resend_api_key" in RESEND_API_KEY:
+    if not api_key or "your_resend_api_key" in api_key:
         logger.warning("RESEND_API_KEY not configured. OTP printed to console fallback.")
         return True
 
     try:
         import resend
-        resend.api_key = RESEND_API_KEY
+        resend.api_key = api_key
 
         html_content = f"""
         <div style="font-family: Arial, sans-serif; background-color: #0d0f17; color: #f8fafc; padding: 24px; border-radius: 16px; max-width: 500px; margin: 0 auto; border: 1px solid rgba(255,255,255,0.1);">
@@ -39,14 +42,17 @@ def send_device_otp_email(to_email: str, first_name: str, otp_code: str, device_
         </div>
         """
 
-        resend.Emails.send({
-            "from": RESEND_FROM_EMAIL,
+        res = resend.Emails.send({
+            "from": from_email,
             "to": to_email,
             "subject": f"LifeFlow Security Code: {otp_code} (New Device)",
             "html": html_content
         })
-        logger.info(f"Successfully sent OTP email to {to_email} via Resend API.")
+        logger.info(f"Successfully sent OTP email to {to_email} via Resend API: {res}")
+        print(f"✅ [Resend Dispatch Success] Sent OTP email to {to_email}: {res}", flush=True)
         return True
     except Exception as e:
         logger.error(f"Failed to send OTP email via Resend: {e}")
+        print(f"❌ [Resend Dispatch Error]: {e}", flush=True)
         return False
+
