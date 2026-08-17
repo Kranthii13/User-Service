@@ -49,24 +49,14 @@ def send_device_otp_email(to_email: str, first_name: str, otp_code: str, device_
                 "subject": f"LifeFlow Security Code: {otp_code}",
                 "html": html_content
             })
-            logger.info(f"Successfully sent OTP email to {to_email} via Resend API: {res}")
-            print(f"✅ [Resend Dispatch Success] Sent OTP email to {to_email}: {res}", flush=True)
+            logger.info(f"Successfully sent OTP email strictly to {to_email} via Resend API: {res}")
+            print(f"✅ [Resend Dispatch Success] Sent OTP email strictly to {to_email}: {res}", flush=True)
             return True
         except Exception as send_err:
             err_msg = str(send_err)
-            logger.warning(f"Resend direct dispatch error for {to_email}: {err_msg}")
-            fallback_recipient = "kranthikumarss28@gmail.com"
-            print(f"⚠️ [Resend Dev Fallback] Dispatching test OTP for {to_email} to verified owner: {fallback_recipient}", flush=True)
-            try:
-                res_fallback = resend.Emails.send({
-                    "from": "onboarding@resend.dev",
-                    "to": fallback_recipient,
-                    "subject": f"LifeFlow Security Code: {otp_code} (Account: {to_email})",
-                    "html": html_content
-                })
-                print(f"✅ [Resend Fallback Success] Sent OTP email to {fallback_recipient}: {res_fallback}", flush=True)
-            except Exception as fb_err:
-                print(f"❌ [Resend Fallback Error]: {fb_err}", flush=True)
+            logger.warning(f"Resend dispatch error for {to_email}: {err_msg}")
+            print(f"⚠️ [Resend Dispatch Error for {to_email}]: {err_msg}", flush=True)
+            print(f"🔑 [CONSOLE FALLBACK OTP CODE]: Code for {to_email} is {otp_code}", flush=True)
             return True
     except Exception as e:
         logger.error(f"Failed to send OTP email via Resend: {e}")
