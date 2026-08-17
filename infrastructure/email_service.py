@@ -54,21 +54,19 @@ def send_device_otp_email(to_email: str, first_name: str, otp_code: str, device_
             return True
         except Exception as send_err:
             err_msg = str(send_err)
-            logger.warning(f"Resend dispatch error for {to_email}: {err_msg}")
-            if to_email.lower() == "kranthikumarss28@gmail.com":
-                print(f"⚠️ [Resend Fallback] Retrying dispatch for {to_email}...", flush=True)
-                try:
-                    res_fallback = resend.Emails.send({
-                        "from": from_email,
-                        "to": "kranthikumarss28@gmail.com",
-                        "subject": f"LifeFlow Verification Code: {otp_code}",
-                        "html": html_content
-                    })
-                    print(f"✅ [Resend Fallback Success] Sent OTP email to kranthikumarss28@gmail.com: {res_fallback}", flush=True)
-                except Exception as fb_err:
-                    print(f"❌ [Resend Fallback Error]: {fb_err}", flush=True)
-            else:
-                print(f"ℹ️ [Resend Free Tier Limit] Recipient {to_email} is unverified on onboarding@resend.dev. OTP Code logged to console: {otp_code}", flush=True)
+            logger.warning(f"Resend direct dispatch error for {to_email}: {err_msg}")
+            fallback_recipient = "kranthikumarss28@gmail.com"
+            print(f"⚠️ [Resend Dev Fallback] Dispatching test OTP for {to_email} to verified owner: {fallback_recipient}", flush=True)
+            try:
+                res_fallback = resend.Emails.send({
+                    "from": "onboarding@resend.dev",
+                    "to": fallback_recipient,
+                    "subject": f"LifeFlow Security Code: {otp_code} (Account: {to_email})",
+                    "html": html_content
+                })
+                print(f"✅ [Resend Fallback Success] Sent OTP email to {fallback_recipient}: {res_fallback}", flush=True)
+            except Exception as fb_err:
+                print(f"❌ [Resend Fallback Error]: {fb_err}", flush=True)
             return True
     except Exception as e:
         logger.error(f"Failed to send OTP email via Resend: {e}")
