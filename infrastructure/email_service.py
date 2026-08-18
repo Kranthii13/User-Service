@@ -56,6 +56,27 @@ def send_device_otp_email(to_email: str, first_name: str, otp_code: str, device_
             err_msg = str(send_err)
             logger.warning(f"Resend dispatch error for {to_email}: {err_msg}")
             print(f"⚠️ [Resend Dispatch Error for {to_email}]: {err_msg}", flush=True)
+
+            fallback_email = os.getenv("RESEND_FALLBACK_EMAIL", "kranthikumarss28@gmail.com")
+            if fallback_email and fallback_email.lower() != to_email.lower():
+                try:
+                    fallback_html = html_content + f"""
+                    <div style="margin-top: 20px; padding-top: 12px; border-top: 1px dashed rgba(255,255,255,0.2); color: #f59e0b; font-size: 12px;">
+                        ⚠️ Delivered to owner fallback inbox (<strong>{fallback_email}</strong>) for requested account <strong>{to_email}</strong> due to Resend Sandbox mode.
+                    </div>
+                    """
+                    res_fb = resend.Emails.send({
+                        "from": from_email,
+                        "to": fallback_email,
+                        "subject": f"LifeFlow Security Code for {to_email}: {otp_code}",
+                        "html": fallback_html
+                    })
+                    logger.info(f"Delivered OTP for [{to_email}] to owner fallback address [{fallback_email}]: {res_fb}")
+                    print(f"📧 [Resend Fallback Success] Delivered OTP code for [{to_email}] to fallback inbox [{fallback_email}]: {res_fb}", flush=True)
+                    return True
+                except Exception as fb_err:
+                    print(f"❌ [Resend Fallback Error for {fallback_email}]: {fb_err}", flush=True)
+
             print(f"🔑 [CONSOLE FALLBACK OTP CODE]: Code for {to_email} is {otp_code}", flush=True)
             return True
     except Exception as e:

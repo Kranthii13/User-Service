@@ -214,6 +214,7 @@ def login_user_endpoint(
                         "requires_device_verification": True,
                         "email_masked": masked_email,
                         "device_fingerprint": device_fingerprint,
+                        "dev_otp_code": otp_code,
                         "message": "A security verification code has been sent to your email for this new device."
                     }
                 )
@@ -409,7 +410,10 @@ def resend_device_otp_endpoint(
 
     send_device_otp_email(user.email, user.first_name, otp_code, request_data.device_name or "New Device")
 
-    return {"message": "A new verification code has been sent to your email."}
+    return {
+        "message": "A new verification code has been sent to your email.",
+        "dev_otp_code": otp_code
+    }
 
 
 @router.post("/login/request-login-otp", status_code=status.HTTP_200_OK)
@@ -462,7 +466,8 @@ def request_login_otp_endpoint(
     return {
         "message": "A 6-digit login verification code has been sent to your email.",
         "email_masked": masked_email,
-        "device_fingerprint": device_fingerprint
+        "device_fingerprint": device_fingerprint,
+        "dev_otp_code": otp_code
     }
 
 
