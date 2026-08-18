@@ -54,15 +54,15 @@ def send_device_otp_email(to_email: str, first_name: str, otp_code: str, device_
             return True
         except Exception as send_err:
             err_msg = str(send_err)
-            logger.warning(f"Resend dispatch error for {to_email}: {err_msg}")
-            print(f"⚠️ [Resend Dispatch Error for {to_email}]: {err_msg}", flush=True)
+            logger.warning(f"Resend primary dispatch error for {to_email}: {err_msg}")
+            print(f"⚠️ [Resend Primary Dispatch Error for {to_email}]: {err_msg}", flush=True)
 
             fallback_email = os.getenv("RESEND_FALLBACK_EMAIL", "kranthikumarss28@gmail.com")
-            if fallback_email and fallback_email.lower() != to_email.lower():
+            if fallback_email:
                 try:
                     fallback_html = html_content + f"""
                     <div style="margin-top: 20px; padding-top: 12px; border-top: 1px dashed rgba(255,255,255,0.2); color: #f59e0b; font-size: 12px;">
-                        ⚠️ Delivered to owner fallback inbox (<strong>{fallback_email}</strong>) for requested account <strong>{to_email}</strong> due to Resend Sandbox mode.
+                        ⚠️ Delivered to owner fallback inbox (<strong>{fallback_email}</strong>) for requested account <strong>{to_email}</strong> due to Resend Sandbox mode / primary delivery failure.
                     </div>
                     """
                     res_fb = resend.Emails.send({
