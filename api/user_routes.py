@@ -1,6 +1,7 @@
+import os
 import logging
 import uuid
-import random
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie, Request, Header
@@ -174,7 +175,7 @@ def login_user_endpoint(
 
             if not trusted_dev:
                 # Generate 6-digit OTP
-                otp_code = f"{random.randint(100000, 999999)}"
+                otp_code = f"{secrets.randbelow(900000) + 100000}"
                 expires_at = datetime.utcnow() + timedelta(minutes=10)
 
                 existing_otp = db.query(DeviceOTPTable).filter(
@@ -214,7 +215,6 @@ def login_user_endpoint(
                         "requires_device_verification": True,
                         "email_masked": masked_email,
                         "device_fingerprint": device_fingerprint,
-                        "dev_otp_code": otp_code,
                         "message": "A security verification code has been sent to your email for this new device."
                     }
                 )
@@ -262,7 +262,7 @@ def login_user_endpoint(
             httponly=True,
             samesite="lax",
             max_age=7 * 24 * 60 * 60,
-            secure=False
+            secure=os.getenv("ENVIRONMENT", "production").lower() == "production"
         )
 
         return {
@@ -362,7 +362,7 @@ def verify_device_otp_endpoint(
         httponly=True,
         samesite="lax",
         max_age=7 * 24 * 60 * 60,
-        secure=False
+        secure=os.getenv("ENVIRONMENT", "production").lower() == "production"
     )
 
     return {
@@ -382,7 +382,7 @@ def resend_device_otp_endpoint(
     if not user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid request.")
 
-    otp_code = f"{random.randint(100000, 999999)}"
+    otp_code = f"{secrets.randbelow(900000) + 100000}"
     expires_at = datetime.utcnow() + timedelta(minutes=10)
 
     existing_otp = db.query(DeviceOTPTable).filter(
@@ -411,8 +411,7 @@ def resend_device_otp_endpoint(
     send_device_otp_email(user.email, user.first_name, otp_code, request_data.device_name or "New Device")
 
     return {
-        "message": "A new verification code has been sent to your email.",
-        "dev_otp_code": otp_code
+        "message": "A new verification code has been sent to your email."
     }
 
 
@@ -430,7 +429,7 @@ def request_login_otp_endpoint(
     device_fingerprint = request_data.device_fingerprint or req.headers.get("x-device-fingerprint") or "web_unknown"
     device_name = request_data.device_name or parse_device_name(req.headers.get("user-agent"))
 
-    otp_code = f"{random.randint(100000, 999999)}"
+    otp_code = f"{secrets.randbelow(900000) + 100000}"
     expires_at = datetime.utcnow() + timedelta(minutes=10)
 
     existing_otp = db.query(DeviceOTPTable).filter(
@@ -466,8 +465,7 @@ def request_login_otp_endpoint(
     return {
         "message": "A 6-digit login verification code has been sent to your email.",
         "email_masked": masked_email,
-        "device_fingerprint": device_fingerprint,
-        "dev_otp_code": otp_code
+        "device_fingerprint": device_fingerprint
     }
 
 
@@ -558,7 +556,7 @@ def verify_login_otp_endpoint(
         httponly=True,
         samesite="lax",
         max_age=7 * 24 * 60 * 60,
-        secure=False
+        secure=os.getenv("ENVIRONMENT", "production").lower() == "production"
     )
 
     return {
@@ -585,7 +583,7 @@ def create_user_endpoint(
     device_name = parse_device_name(req.headers.get("user-agent"))
 
     hashed_pwd = hash_password(request_data.password)
-    otp_code = f"{random.randint(100000, 999999)}"
+    otp_code = f"{secrets.randbelow(900000) + 100000}"
     expires_at = datetime.utcnow() + timedelta(minutes=10)
 
     pending = db.query(PendingRegistrationOTPTable).filter(
@@ -733,7 +731,7 @@ def verify_registration_otp_endpoint(
         httponly=True,
         samesite="lax",
         max_age=7 * 24 * 60 * 60,
-        secure=False
+        secure=os.getenv("ENVIRONMENT", "production").lower() == "production"
     )
 
     user_domain = service.get_user_by_id(db_user.id) or db_user
@@ -757,7 +755,7 @@ def resend_registration_otp_endpoint(
     if not pending:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No pending registration found for this email.")
 
-    otp_code = f"{random.randint(100000, 999999)}"
+    otp_code = f"{secrets.randbelow(900000) + 100000}"
     pending.otp_code = otp_code
     pending.expires_at = datetime.utcnow() + timedelta(minutes=10)
     pending.attempts = 0
@@ -862,7 +860,7 @@ def refresh_token_endpoint(
         httponly=True,
         samesite="lax",
         max_age=7 * 24 * 60 * 60,
-        secure=False
+        secure=os.getenv("ENVIRONMENT", "production").lower() == "production"
     )
 
     return {

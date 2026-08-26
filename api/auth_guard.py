@@ -80,7 +80,7 @@ async def get_current_user_id(
 
     token = auth_header.split(" ")[1]
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM, "RS256"], issuer=ISSUER, audience=AUDIENCE, options={"verify_signature": False})
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM], issuer=ISSUER, audience=AUDIENCE)
         user_id: Optional[str] = payload.get("sub")
         if not user_id:
             raise ValueError()
