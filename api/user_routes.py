@@ -871,7 +871,7 @@ def refresh_token_endpoint(
         "token_type": "bearer"
     }
 
-# --- SESSION MANAGEMENT (List Active & Inactive Devices) ---
+# --- SESSION MANAGEMENT (List Unique Devices: Active & Inactive) ---
 @router.get("/sessions", response_model=List[SessionResponse])
 def get_user_sessions_endpoint(
     req: Request,
@@ -889,31 +889,43 @@ def get_user_sessions_endpoint(
         except Exception:
             pass
 
-    # Query all sessions (both active and inactive) from the past 30 days
+    # Query all tokens for user sorted with most recent usage first
     tokens = db.query(RefreshTokenTable).filter(
         RefreshTokenTable.user_id == current_user_id
     ).order_by(desc(RefreshTokenTable.last_used)).all()
 
     now = datetime.utcnow()
-    seen_sessions = set()
-    result = []
+    # Group by device identity: device_name (or device_name + ip) to show 1 entry per physical device
+    seen_devices: Dict[str, dict] = {}
+    
     for t in tokens:
-        if t.session_id not in seen_sessions:
-            seen_sessions.add(t.session_id)
-            is_active = (not t.revoked) and (t.expires_at.replace(tzinfo=None) > now)
-            is_curr = (current_token_session_id is not None and t.session_id == current_token_session_id)
-            
-            result.append({
+        device_key = (t.device_name or "Unknown Device").strip().lower()
+        is_token_active = (not t.revoked) and (t.expires_at.replace(tzinfo=None) > now)
+        is_curr = (current_token_session_id is not None and t.session_id == current_token_session_id)
+
+        if device_key not in seen_devices:
+            seen_devices[device_key] = {
                 "session_id": t.session_id,
                 "device_name": t.device_name or "Unknown Device",
                 "last_seen": t.last_used,
                 "created_at": t.created_at,
                 "ip_address": t.ip_address,
-                "is_active": is_active,
+                "is_active": is_token_active,
                 "is_current": is_curr
-            })
+            }
+        else:
+            # If any session on this device is currently active, mark the device active
+            if is_token_active:
+                seen_devices[device_key]["is_active"] = True
+            if is_curr:
+                seen_devices[device_key]["is_current"] = True
+            # Keep the newest last_seen
+            if t.last_used > seen_devices[device_key]["last_seen"]:
+                seen_devices[device_key]["last_seen"] = t.last_used
+
+    result = list(seen_devices.values())
     
-    # If no session matched as current, mark the top active one as current
+    # If no session matched as current, mark the first active device as current
     if result and not any(r["is_current"] for r in result):
         for r in result:
             if r["is_active"]:
