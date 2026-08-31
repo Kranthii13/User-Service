@@ -142,7 +142,10 @@ class SessionResponse(BaseModel):
     session_id: uuid.UUID
     device_name: str
     last_seen: datetime
-    is_current: bool
+    created_at: Optional[datetime] = None
+    ip_address: Optional[str] = None
+    is_active: bool = True
+    is_current: bool = False
 
 router = APIRouter(tags=["Users"])
 
@@ -868,29 +871,55 @@ def refresh_token_endpoint(
         "token_type": "bearer"
     }
 
-# --- SESSION MANAGEMENT (List Active Devices) ---
+# --- SESSION MANAGEMENT (List Active & Inactive Devices) ---
 @router.get("/sessions", response_model=List[SessionResponse])
 def get_user_sessions_endpoint(
+    req: Request,
     current_user_id: uuid.UUID = Depends(get_current_user_id),
+    refresh_token: Optional[str] = Cookie(None),
     db: Session = Depends(get_db)
 ):
+    current_token_session_id = None
+    if refresh_token and "." in refresh_token:
+        try:
+            token_id_str = refresh_token.split(".")[0]
+            current_tok = db.query(RefreshTokenTable).filter(RefreshTokenTable.token_id == uuid.UUID(token_id_str)).first()
+            if current_tok:
+                current_token_session_id = current_tok.session_id
+        except Exception:
+            pass
+
+    # Query all sessions (both active and inactive) from the past 30 days
     tokens = db.query(RefreshTokenTable).filter(
-        RefreshTokenTable.user_id == current_user_id,
-        RefreshTokenTable.revoked == False,
-        RefreshTokenTable.expires_at > datetime.utcnow()
+        RefreshTokenTable.user_id == current_user_id
     ).order_by(desc(RefreshTokenTable.last_used)).all()
 
+    now = datetime.utcnow()
     seen_sessions = set()
     result = []
     for t in tokens:
         if t.session_id not in seen_sessions:
             seen_sessions.add(t.session_id)
+            is_active = (not t.revoked) and (t.expires_at.replace(tzinfo=None) > now)
+            is_curr = (current_token_session_id is not None and t.session_id == current_token_session_id)
+            
             result.append({
                 "session_id": t.session_id,
                 "device_name": t.device_name or "Unknown Device",
                 "last_seen": t.last_used,
-                "is_current": False
+                "created_at": t.created_at,
+                "ip_address": t.ip_address,
+                "is_active": is_active,
+                "is_current": is_curr
             })
+    
+    # If no session matched as current, mark the top active one as current
+    if result and not any(r["is_current"] for r in result):
+        for r in result:
+            if r["is_active"]:
+                r["is_current"] = True
+                break
+
     return result
 
 # --- REVOKE SINGLE SESSION ---
