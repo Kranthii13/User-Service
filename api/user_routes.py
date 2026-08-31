@@ -934,17 +934,31 @@ def get_user_sessions_endpoint(
 
     return result
 
-# --- REVOKE SINGLE SESSION ---
+# --- REVOKE SINGLE SESSION OR ENTIRE DEVICE ---
 @router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
 def revoke_session_endpoint(
     session_id: uuid.UUID,
     current_user_id: uuid.UUID = Depends(get_current_user_id),
     db: Session = Depends(get_db)
 ):
-    db.query(RefreshTokenTable).filter(
+    target_token = db.query(RefreshTokenTable).filter(
         RefreshTokenTable.user_id == current_user_id,
         RefreshTokenTable.session_id == session_id
-    ).update({"revoked": True})
+    ).first()
+
+    if target_token and target_token.device_name:
+        # Revoke all tokens associated with this physical device for the user
+        db.query(RefreshTokenTable).filter(
+            RefreshTokenTable.user_id == current_user_id,
+            RefreshTokenTable.device_name == target_token.device_name
+        ).update({"revoked": True})
+    else:
+        # Fallback to revoking just by session_id
+        db.query(RefreshTokenTable).filter(
+            RefreshTokenTable.user_id == current_user_id,
+            RefreshTokenTable.session_id == session_id
+        ).update({"revoked": True})
+
     db.commit()
 
     logger.info(f"AUDIT: EVENT=REVOKE_SESSION USER_ID={current_user_id} TARGET_SESSION={session_id}")
