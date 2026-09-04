@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from infrastructure.database import create_db_and_tables
-from api import user_routes
+from api import user_routes, capabilities as caps_module
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
@@ -8,6 +8,7 @@ app = FastAPI(
     description="A professional and structured example using FastAPI.",
     version="1.0.0",
 )
+app.state.service_key = "users"
 
 import os
 
@@ -37,3 +38,7 @@ app.include_router(user_routes.router)
 
 # Also mount with /api/users prefix (for direct service requests: /api/users/login, /api/users/)
 app.include_router(user_routes.router, prefix="/api/users")
+
+# Mount AI capability catalog at root and /api/users prefix
+app.include_router(caps_module.router)
+app.include_router(caps_module.router, prefix="/api/users")
