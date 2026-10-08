@@ -235,7 +235,13 @@ def login_user_endpoint(
             db.commit()
 
         session_id = uuid.uuid4()
-        access_token = create_access_token(data={"sub": str(user.id), "email": user.email, "sid": str(session_id)})
+        access_token = create_access_token(data={
+            "sub": str(user.id),
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "sid": str(session_id)
+        })
         token_id_str, secret_token, combined_cookie = generate_split_refresh_token()
         
         family_id = str(uuid.uuid4())
@@ -336,7 +342,13 @@ def verify_device_otp_endpoint(
 
     # Issue Session Tokens
     session_id = uuid.uuid4()
-    access_token = create_access_token(data={"sub": str(user.id), "email": user.email, "sid": str(session_id)})
+    access_token = create_access_token(data={
+        "sub": str(user.id),
+        "email": user.email,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "sid": str(session_id)
+    })
     token_id_str, secret_token, combined_cookie = generate_split_refresh_token()
     family_id = str(uuid.uuid4())
     hashed_argon2 = hash_refresh_token(secret_token)
@@ -530,7 +542,13 @@ def verify_login_otp_endpoint(
     db.commit()
 
     session_id = uuid.uuid4()
-    access_token = create_access_token(data={"sub": str(user.id), "email": user.email, "sid": str(session_id)})
+    access_token = create_access_token(data={
+        "sub": str(user.id),
+        "email": user.email,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "sid": str(session_id)
+    })
     token_id_str, secret_token, combined_cookie = generate_split_refresh_token()
     family_id = str(uuid.uuid4())
     hashed_argon2 = hash_refresh_token(secret_token)
@@ -705,7 +723,13 @@ def verify_registration_otp_endpoint(
     db.commit()
 
     session_id = uuid.uuid4()
-    access_token = create_access_token(data={"sub": str(db_user.id), "email": db_user.email, "sid": str(session_id)})
+    access_token = create_access_token(data={
+        "sub": str(db_user.id),
+        "email": db_user.email,
+        "first_name": db_user.first_name,
+        "last_name": db_user.last_name,
+        "sid": str(session_id)
+    })
     token_id_str, secret_token, combined_cookie = generate_split_refresh_token()
     family_id = str(uuid.uuid4())
     hashed_argon2 = hash_refresh_token(secret_token)
@@ -817,7 +841,11 @@ def refresh_token_endpoint(
         if time_since_used < 10:
             # Legitimate multi-tab concurrent refresh -> Return active access token without family revocation
             logger.info(f"AUDIT: EVENT=TOKEN_REFRESH_CONCURRENT_GRACE USER_ID={stored_token.user_id} SESSION_ID={stored_token.session_id}")
-            new_access_token = create_access_token(data={"sub": str(stored_token.user_id), "sid": str(stored_token.session_id)})
+            curr_user = db.query(UserTable).filter(UserTable.id == stored_token.user_id).first()
+            token_claims = {"sub": str(stored_token.user_id), "sid": str(stored_token.session_id)}
+            if curr_user:
+                token_claims.update({"email": curr_user.email, "first_name": curr_user.first_name, "last_name": curr_user.last_name})
+            new_access_token = create_access_token(data=token_claims)
             return {"access_token": new_access_token, "token_type": "bearer"}
 
         # Real token reuse (Compromise Detected!) -> Revoke all tokens in family
@@ -855,7 +883,11 @@ def refresh_token_endpoint(
 
     logger.info(f"AUDIT: EVENT=TOKEN_REFRESH_SUCCESS USER_ID={stored_token.user_id} SESSION_ID={stored_token.session_id}")
 
-    new_access_token = create_access_token(data={"sub": str(stored_token.user_id), "sid": str(stored_token.session_id)})
+    curr_user = db.query(UserTable).filter(UserTable.id == stored_token.user_id).first()
+    token_claims = {"sub": str(stored_token.user_id), "sid": str(stored_token.session_id)}
+    if curr_user:
+        token_claims.update({"email": curr_user.email, "first_name": curr_user.first_name, "last_name": curr_user.last_name})
+    new_access_token = create_access_token(data=token_claims)
     
     response.set_cookie(
         key="refresh_token",
