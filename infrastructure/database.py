@@ -23,7 +23,9 @@ def format_supabase_url(url: str) -> str:
     if not url:
         return url
     if url.startswith("postgres://"):
-        url = url.replace("postgres://", "postgresql://", 1)
+        url = url.replace("postgres://", "postgresql+psycopg2://", 1)
+    elif url.startswith("postgresql://") and not url.startswith("postgresql+"):
+        url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
     if "db.ckfgoifiwvvsbccgjnmn.supabase.co" in url:
         url = url.replace("postgres:", "postgres.ckfgoifiwvvsbccgjnmn:", 1)
         url = url.replace("db.ckfgoifiwvvsbccgjnmn.supabase.co:5432", "aws-0-ap-southeast-1.pooler.supabase.com:6543", 1)
